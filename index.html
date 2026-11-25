@@ -216,7 +216,7 @@ const confirmBox = (title, text, ok, cls) => dialog(title, h('div', null, text),
   [{ label: 'Cancel', value: false, cls: 'ghost' }, { label: ok || 'Yes', value: true, cls: cls || '' }]);
 
 // Apnar Apps Script Web App (/exec) URL-ti ekhane bosan (Deploy -> Manage deployments theke copy korun)
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwlVbVZFw1e43iqXv32Cptve5bVEEBfh6Y-mM_cBlC61Cy_HwRBiaXinb180Gfz0ya1-g/exec';
+const GAS_API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
 
 function handleApiResponse(res, resolve, reject) {
   if (res && res.ok) return resolve(res.data);
@@ -1169,15 +1169,185 @@ async function pageZoneList(arg) {
   await loadZone();
 }
 
-/** Circle list and Subdivision list: preview of the printable pages with a search box. */
-function pageModelList(type, title) {
+/** Circle List: Zone-List style deduplicated view (Event 1, Event 2, Student Code) + Circle Chest Freeze button. */
+async function pageCircleList() {
+  const wide = isWide();
+  let zoneKey = '';
+  const f = { q: '', group: '', gender: '', cls: '' };
+  const root = h('div'), head = h('div', { class: 'toolbar' }), area = h('div');
+  root.append(head, area);
+  setMain(root, 'Circle List');
+
+  async function load() {
+    const d = await busy(() => call('apiGetCircleList', zoneKey));
+    if (d) draw(d);
+  }
+
+  async function circleChestAction(frozen) {
+    if (frozen) {
+      if (!(await confirmBox('Unfreeze circle chest numbers', 'Circle chest numbers will be built again from the first row. Printed sheets will no longer match.', 'Unfreeze', 'danger'))) return;
+      let r = await busyTry(() => call('apiUnfreezeCircleChest', false));
+      if (!r.ok && r.error.code === 'HAS_RESULTS') {
+        if (!(await confirmBox('Circle results will be cleared', 'Circle results are already entered. Unfreezing changes circle chest numbers, so these results will be cleared. Continue?', 'Clear results and unfreeze', 'danger'))) return;
+        r = await busyTry(() => call('apiUnfreezeCircleChest', true));
+      }
+      if (!r.ok) return toast(r.error.message, 'error');
+      toast('Circle chest numbers unfrozen.', 'ok');
+    } else {
+      const r = await busyTry(() => call('apiFreezeCircleChest'));
+      if (!r.ok) return toast(r.error.message, 'error');
+      toast('Circle chest numbers are final now.', 'ok');
+    }
+    await load();
+  }
+
+  function draw(d) {
+    head.replaceChildren(
+      h('label', null, 'Zone'),
+      select([['', 'All zones']].concat(ZONES.map(z => [z.key, z.label])), zoneKey, v => { zoneKey = v; load(); })
+    );
+
+    const match = r => (!f.group || r.group === f.group) && (!f.gender || r.gender === f.gender) && (!f.cls || r.cls === f.cls) &&
+      (!f.q || [r.studentCode, r.name, r.father, r.schoolName, r.event1, r.event2, r.chestNo].join(' ').toLowerCase().includes(f.q.toLowerCase()));
+
+    const filters = h('div', { class: 'toolbar' },
+      h('input', { placeholder: 'Search name, code, school, event or chest no', value: f.q, oninput: e => { f.q = e.target.value; fill(); } }),
+      select([['', 'All groups'], 'A', 'B', 'C'].map(x => Array.isArray(x) ? x : [x, 'Group ' + x]), f.group, v => { f.group = v; fill(); }),
+      select([['', 'All genders'], ['BOYS', 'BOYS'], ['GIRLS', 'GIRLS']], f.gender, v => { f.gender = v; fill(); }),
+      select([['', 'All classes']].concat(CLASSES.map(c => [c, c])), f.cls, v => { f.cls = v; fill(); }),
+      h('button', { class: 'btn ghost small', type: 'button', onclick: () => { f.q = f.group = f.gender = f.cls = ''; draw(d); } }, 'Clear filters')
+    );
+
+    const listContainer = h('div');
+
+    const fill = () => {
+      listContainer.replaceChildren(...d.zones.map(z => {
+        const list = (z.participants || []).filter(match);
+        const tbody = h('tbody');
+        tbody.append(...list.map((r, i) => h('tr', null,
+          h('td', null, i + 1),
+          h('td', null, r.studentCode || '–'),
+          h('td', null, r.chestNo === '' ? '–' : h('span', { class: 'chest' }, r.chestNo)),
+          h('td', null, r.name),
+          h('td', null, r.dob),
+          h('td', null, r.father),
+          h('td', null, r.cls),
+          h('td', null, r.group),
+          h('td', null, r.gender),
+          h('td', null, r.event1),
+          h('td', null, r.event2 || ''),
+          h('td', null, r.schoolName)
+        )));
+
+        if (!tbody.children.length) return null;
+
+        return h('div', { style: { marginBottom: '24px' } },
+          h('div', { class: 'card', style: { marginBottom: '8px' } },
+            h('b', null, z.zoneLabel),
+            h('div', null, h('span', { class: 'chip' }, list.length + ' students'))
+          ),
+          h('div', { class: 'tw' }, h('table', { class: 't' },
+            h('thead', null, h('tr', null, ['Sl No', 'Student Code', 'Chest No', 'Name', 'DOB', "Father's Name", 'Class', 'Group', 'Gender', 'Event 1', 'Event 2', 'Name of School'].map(x => h('th', null, x)))),
+            tbody
+          ))
+        );
+      }).filter(Boolean));
+      if (!listContainer.children.length) listContainer.replaceChildren(emptyNote('কোনো এন্ট্রি পাওয়া যায়নি।'));
+    };
+
+    fill();
+
+    area.replaceChildren(
+      h('div', { class: 'card' },
+        h('b', null, 'Circle List'),
+        h('div', null,
+          h('span', { class: 'chip ' + (d.circleChestFrozen ? '' : 'warn') }, d.circleChestFrozen ? 'Circle chest numbers final' : 'Circle chest numbers temporary'), ' ',
+          wide ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => circleChestAction(d.circleChestFrozen) }, d.circleChestFrozen ? 'Unfreeze circle chest numbers' : 'Freeze circle chest numbers') : null
+        )
+      ),
+      h('div', { class: 'toolbar' },
+        zoneKey ? h('b', null, 'This zone:') : null,
+        zoneKey ? exportBar(() => ({ type: 'circle.list', zone: zoneKey })) : null,
+        h('b', null, 'Whole circle:'),
+        exportBar(() => ({ type: 'circle.list' }))
+      ),
+      filters,
+      listContainer
+    );
+  }
+
+  await load();
+}
+
+/** Subdivision / District / State Level List: Zone-List style deduplicated view (Event 1, Event 2, Student Code). */
+function pageHigherList(level, title) {
   return async function () {
-    const root = h('div'), box = h('div');
-    const search = h('input', { placeholder: 'Search in the list', oninput: e => filterRows(box, e.target.value) });
-    root.append(h('div', { class: 'toolbar' }, search), exportBar(() => ({ type })), box);
+    const f = { q: '', zone: '', group: '', gender: '', cls: '' };
+    const root = h('div'), area = h('div');
+    root.append(area);
     setMain(root, title);
-    const m = await busy(() => call('apiGetReportPreview', { type }));
-    if (m) box.replaceChildren(renderModel(m));
+
+    const d = await busy(() => call('apiGetHigherList', level));
+    if (!d) return;
+
+    const match = r => (!f.zone || r.zone === f.zone) && (!f.group || r.group === f.group) && (!f.gender || r.gender === f.gender) && (!f.cls || r.cls === f.cls) &&
+      (!f.q || [r.studentCode, r.name, r.father, r.schoolName, r.zoneLabel, r.event1, r.event2, r.chestNo].join(' ').toLowerCase().includes(f.q.toLowerCase()));
+
+    function draw() {
+      const filters = h('div', { class: 'toolbar' },
+        h('input', { placeholder: 'Search name, code, school, zone, event or chest no', value: f.q, oninput: e => { f.q = e.target.value; fill(); } }),
+        select([['', 'All zones']].concat(ZONES.map(z => [z.key, z.label])), f.zone, v => { f.zone = v; fill(); }),
+        select([['', 'All groups'], 'A', 'B', 'C'].map(x => Array.isArray(x) ? x : [x, 'Group ' + x]), f.group, v => { f.group = v; fill(); }),
+        select([['', 'All genders'], ['BOYS', 'BOYS'], ['GIRLS', 'GIRLS']], f.gender, v => { f.gender = v; fill(); }),
+        select([['', 'All classes']].concat(CLASSES.map(c => [c, c])), f.cls, v => { f.cls = v; fill(); }),
+        h('button', { class: 'btn ghost small', type: 'button', onclick: () => { f.q = f.zone = f.group = f.gender = f.cls = ''; draw(); } }, 'Clear filters')
+      );
+
+      const listContainer = h('div');
+      const countChip = h('span', { class: 'chip' });
+
+      const fill = () => {
+        const list = (d.participants || []).filter(match);
+        countChip.textContent = list.length + ' students';
+        if (!list.length) {
+          listContainer.replaceChildren(emptyNote('কোনো এন্ট্রি পাওয়া যায়নি।'));
+          return;
+        }
+        const tbody = h('tbody');
+        tbody.append(...list.map((r, i) => h('tr', null,
+          h('td', null, i + 1),
+          h('td', null, r.studentCode || '–'),
+          h('td', null, r.chestNo === '' ? '–' : h('span', { class: 'chest' }, r.chestNo)),
+          h('td', null, r.name),
+          h('td', null, r.dob),
+          h('td', null, r.father),
+          h('td', null, r.cls),
+          h('td', null, r.group),
+          h('td', null, r.gender),
+          h('td', null, r.event1),
+          h('td', null, r.event2 || ''),
+          h('td', null, r.schoolName),
+          h('td', null, r.zoneLabel)
+        )));
+        listContainer.replaceChildren(
+          h('div', { class: 'tw' }, h('table', { class: 't' },
+            h('thead', null, h('tr', null, ['Sl No', 'Student Code', 'Chest No', 'Name', 'DOB', "Father's Name", 'Class', 'Group', 'Gender', 'Event 1', 'Event 2', 'Name of School', 'Zone'].map(x => h('th', null, x)))),
+            tbody
+          ))
+        );
+      };
+
+      fill();
+
+      area.replaceChildren(
+        h('div', { class: 'card' }, h('b', null, title), h('div', null, countChip)),
+        exportBar(() => ({ type: level + '.list' })),
+        filters,
+        listContainer
+      );
+    }
+
+    draw();
   };
 }
 
@@ -2113,10 +2283,10 @@ function pageLock(page) {
 
 const PAGES = {
   'dashboard': pageDashboard, 'archive': pageArchive, 'list.create': pageCreateList, 'list.zone': pageZoneList,
-  'list.circle': pageModelList('circle.list', 'Circle List'),
-  'list.subdivision': pageModelList('subdivision.list', 'Subdivision List'),
-  'list.district': pageModelList('district.list', 'District List'),
-  'list.state': pageModelList('state.list', 'State Level List'),
+  'list.circle': pageCircleList,
+  'list.subdivision': pageHigherList('subdivision', 'Subdivision List'),
+  'list.district': pageHigherList('district', 'District List'),
+  'list.state': pageHigherList('state', 'State Level List'),
   'chest.glance': pageGlance, 'judgement': pageJudgement,
   'result.zone': pageResultView('zone'), 'result.circle': pageResultView('circle'),
   'result.subdivision': pageResultView('subdivision'),
