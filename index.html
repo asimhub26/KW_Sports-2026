@@ -133,6 +133,19 @@ table.t.matrix td.ev-dis { background: #F8F9F8; opacity: .45; }
 table.t.matrix input[type="checkbox"] { width: 18px; height: 18px; min-width: 18px; cursor: pointer; accent-color: var(--green); }
 table.t.matrix input[type="checkbox"]:disabled { cursor: not-allowed; }
 table.t.matrix tr.secrow td { background: var(--soft); color: var(--dark); font-weight: 700; text-align: left; padding: 7px 10px; border-top: 2px solid var(--green); }
+/* Create List Checkbox Matrix */
+table.t.matrix { border-collapse: collapse; border: 1px solid #C8D5CC; }
+table.t.matrix th { font-size: 12px; padding: 8px 6px; border: 1px solid #C8D5CC; border-bottom: 2px solid var(--ink); background: #F5F9F6; }
+table.t.matrix td { padding: 6px; font-size: 12.5px; border: 1px solid #D5DFD8; }
+table.t.matrix td.ev-on { background: #F1FAF4; }
+table.t.matrix td.ev-off { background: #F4F5F6; color: #C0C8C2; }
+table.t.matrix td.ev-chk { background: #D7F3E3; }
+table.t.matrix td.ev-dis { background: #F9FAF9; }
+table.t.matrix td.ev-dis input[type="checkbox"] { opacity: .45; }
+table.t.matrix tbody tr:not(.secrow):hover td { box-shadow: inset 0 0 0 999px rgba(31, 107, 74, .06); }
+table.t.matrix input[type="checkbox"] { width: 18px; height: 18px; min-width: 18px; cursor: pointer; accent-color: var(--green); }
+table.t.matrix input[type="checkbox"]:disabled { cursor: not-allowed; }
+table.t.matrix tr.secrow td { background: var(--soft); color: var(--dark); font-weight: 700; text-align: left; padding: 7px 10px; border: 1px solid #C8D5CC; border-top: 2px solid var(--green); }
 .gbadge { display: inline-block; margin-left: 3px; font-size: 10px; padding: 1px 5px; border-radius: 99px; background: var(--gold); color: var(--ink); font-weight: 700; vertical-align: middle; }
 </style>
 </head>
